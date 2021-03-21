@@ -170,12 +170,9 @@ def main():
                 else: 
                         color_map.append('skyblue')
 
-
-        
-        
         plt.axis("off")
         plt.figure(figsize = (15,15))
         nx.draw_networkx(G,node_color = color_map, node_size = 2500,font_size = 12, pos=nx.kamada_kawai_layout(G))
         nx.draw_networkx_edge_labels(G, edge_labels=labels, pos=nx.kamada_kawai_layout(G), font_size= 12)
-        plt.savefig("grap.png")
+        plt.savefig("AStar.png")
 main()
