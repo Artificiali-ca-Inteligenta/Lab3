@@ -1,4 +1,9 @@
+import numpy as np
 import matplotlib.pyplot as plt
+import shapely.geometry
+import descartes
+
+from math import sqrt
 import csv
 
 class Point:
@@ -7,43 +12,19 @@ class Point:
         self.y = y
 
     def calculateDistance(self, Point):
-        return (self.x-Point.x)*(self.x-Point.x)+(self.y*Point.y)*(self.y*Point.y)
+        return int(sqrt((Point.x-self.x)**2+(Point.y-self.y)**2))
 
     def deseneaza(self): 
         plt.plot(self.x, self.y,  color='blue', marker='o', markerfacecolor='blue', markersize=12)
-    
+
+    def __hash__(self):
+        return hash((self.x, self.y))
+
     def __eq__(self, p):
-        if abs(p.x-self.x)<1 and abs(p.y-self.y)<1.5:
-            return True
-        return False
+        return self.x == p.x and self.y == p.y
 
     def __str__(self):
         return str(self.x) + " " + str(self.y)
-
-# calculam pozitia unui punct fata de o dreapta determinate de 2 puncte 
-def pozPunct(A,B,C):
-    return (C.y-A.y)*(B.x-A.x) > (B.y-A.y)*(C.x-A.x)
-
-    
-# calculeaza cooeficientii ecuatiei dreptei determinata de p1 si p2
-def lineEq(p1,p2):
-    A = (p1.y - p2.y)
-    B = (p2.x - p1.x)
-    C = (p1.x*p2.y - p2.x*p1.y)
-    return A, B, -C
-
-# intersectia a doua drepte 
-def lineIntersection(L1, L2):
-    D  = L1[0] * L2[1] - L1[1] * L2[0]
-    Dx = L1[2] * L2[1] - L1[1] * L2[2]
-    Dy = L1[0] * L2[2] - L1[2] * L2[0]
-    if D != 0:
-        x = Dx / D
-        y = Dy / D
-        return Point(x,y)
-    else:
-        return False
-
 
 class Edge:
     def __init__(self, p1, p2):
@@ -51,55 +32,196 @@ class Edge:
         self.p2 = p2
         self.distance = p1.calculateDistance(p2)
 
-    def intersect(self, edg):
-        if pozPunct(self.p1,edg.p1,edg.p2) != pozPunct(self.p2,edg.p1,edg.p2) and pozPunct(edg.p1,edg.p2,self.p1) != pozPunct(edg.p1,edg.p2,self.p2):
-            return True
-        return False
-
-    def intersectAnyEdge(self, edgeList):
-        for edge in edgeList:
-            if self.intersect(edge):
-                return edge
-        return False
-
-    def deseneaza(self):
-        plt.plot([self.p1.x, self.p2.x], [self.p1.y, self.p2.y],  color='blue', marker='o', markerfacecolor='red', markersize=12)
-
     def __str__(self):
         return str(self.p1) + " " + str(self.p2)
-    
-class Figure:
-    def __init__(self, pointList, edgeList):
-        self.pointList = pointList
-        self.edgeList = edgeList
 
-    def addPoint(self, Point):
-        self.pointList.append(Point)
-    def addEdge(self, Edge):
-        self.edgeList.append(Edge)
+# This class represent a graph
+class AStarGraph:
+    # Initialize the class
+    def __init__(self, graph_dict=None, directed=True):
+        self.graph_dict = graph_dict or {}
+        self.directed = directed
+        if not directed:
+            self.make_undirected()
+    # Create an undirected graph by adding symmetric edges
+    def make_undirected(self):
+        for a in list(self.graph_dict.keys()):
+            for (b, dist) in self.graph_dict[a].items():
+                self.graph_dict.setdefault(b, {})[a] = dist
+    # Add a link from A and B of given distance, and also add the inverse link if the graph is undirected
+    def connect(self, A, B, distance=1):
+        self.graph_dict.setdefault(A, {})[B] = distance
+        if not self.directed:
+            self.graph_dict.setdefault(B, {})[A] = distance
+    # Get neighbors or a neighbor
+    def get(self, a, b=None):
+        links = self.graph_dict.setdefault(a, {})
+        if b is None:
+            return links
+        else:
+            return links.get(b)
+    # Return a list of nodes in the graph
+    def nodes(self):
+        s1 = set([k for k in self.graph_dict.keys()])
+        s2 = set([k2 for v in self.graph_dict.values() for k2, v2 in v.items()])
+        nodes = s1.union(s2)
+        return list(nodes)
+# This class represent a node
+class AStarNode:
+    # Initialize the class
+    def __init__(self, name:str, parent:str):
+        self.name = name
+        self.parent = parent
+        self.g = 0 # Distance to start node
+        self.h = 0 # Distance to goal node
+        self.f = 0 # Total cost
+    # Compare nodes
+    def __eq__(self, other):
+        return self.name == other.name
+    # Sort nodes
+    def __lt__(self, other):
+         return self.f < other.f
+    # , node
+    def __repr__(self):
+        return ('({0},{1})'.format(self.name, self.f))
+# A* search
+def AStarSearch(graph, heuristics, start, end):
     
-    def deseneaza(self):
-        for edge in self.edgeList:
-            plt.plot([edge.p1.x, edge.p2.x], [edge.p1.y, edge.p2.y],  color='red', marker='o', markerfacecolor='red', markersize=12)
+    # Create lists for open nodes and closed nodes
+    open = []
+    closed = []
+    # Create a start node and an goal node
+    start_node = AStarNode(start, None)
+    goal_node = AStarNode(end, None)
+    # Add the start node
+    open.append(start_node)
+    
+    # Loop until the open list is empty
+    while len(open) > 0:
+        # Sort the open list to get the node with the lowest cost first
+        open.sort()
+        # Get the node with the lowest cost
+        current_node = open.pop(0)
+        # Add the current node to the closed list
+        closed.append(current_node)
+        
+        # Check if we have reached the goal, return the path
+        if current_node == goal_node:
+            path = []
+            while current_node != start_node:
+                path.append(current_node.name)
+                current_node = current_node.parent
+            path.append(start_node.name)
+            # Return reversed path
+            return path[::-1]
+        # Get neighbours
+        neighbors = graph.get(current_node.name)
+        # Loop neighbors
+        for key, value in neighbors.items():
+            # Create a neighbor node
+            neighbor = AStarNode(key, current_node)
+            # Check if the neighbor is in the closed list
+            if(neighbor in closed):
+                continue
+            # Calculate full path cost
+            neighbor.g = current_node.g + graph.get(current_node.name, neighbor.name)
+            neighbor.h = heuristics.get(neighbor.name)
+            neighbor.f = neighbor.g + neighbor.h
+            # Check if neighbor is in open list and if it has a lower f value
+            if(add_to_open(open, neighbor) == True):
+                # Everything is green, add neighbor to open list
+                open.append(neighbor)
+    # Return None, no path is found
+    return None
+# Check if a neighbor should be added to open list
+def add_to_open(open, neighbor):
+    for node in open:
+        if (neighbor == node and neighbor.f > node.f):
+            return False
+    return True
 
-# creaza edges care nu se intersecteaza cu alte edges 
-def createFreeEdges(point, pointList, edgeList):
-    listaEdge = []
+def intersectAnyShape(line, shapeList):
+    for shape in shapeList:
+        if line.intersects(shape):
+            return line.intersection(shape)
+
+def reachableNodes(startPoint, pointList, shapeList, edgeList):
+    nodes = []
     for p in pointList:
-        newEdge = Edge(point, p)
-        segmentIntersection =  newEdge.intersectAnyEdge(edgeList)
-        if segmentIntersection!=False:
-            intersecitonPoint = lineIntersection(lineEq(newEdge.p1,newEdge.p2), lineEq(segmentIntersection.p1, segmentIntersection.p2))
-            print(str(intersecitonPoint) + " " + str(p))
-            if intersecitonPoint == p:
-                listaEdge.append(newEdge)
-    return listaEdge
-
-
+        line = shapely.geometry.LineString([[startPoint.x, startPoint.y], [p.x, p.y]])
+        isIntersecting = False
+        for kante in edgeList:
+            if kante.p1 == p or kante.p2 == p or kante.p1 == startPoint or kante.p2 == startPoint:
+                continue
+            else:
+                second_line = shapely.geometry.LineString([(kante.p1.x, kante.p1.y), (kante.p2.x, kante.p2.y)])
+                if line.intersects(second_line) is True:
+                    isIntersecting = True
+        if isIntersecting is False:
+            nodes.append(p)
+    return nodes
+        
 
 def main():
-    listaPuncte = [Point(1,0),Point(0,0), Point(0,1), Point(1,1), Point(3,3), Point(3,4)]
-    listaDistante = [Edge(listaPuncte[0],listaPuncte[1]), Edge(listaPuncte[1],listaPuncte[2]),Edge(listaPuncte[2],listaPuncte[3]),Edge(listaPuncte[3],listaPuncte[0]), Edge(listaPuncte[4],listaPuncte[5])]
+    shapeList = []
+
+    shapeList.append(shapely.geometry.Polygon([[110,170],[110,222],[284,222],[284,170]]))
+    shapeList.append(shapely.geometry.Polygon([[308,197],[343,162],[291,121]]))
+    shapeList.append(shapely.geometry.Polygon([[410,140],[374,166],[373,207],[408,226],[441,206],[440,165]]))
+    shapeList.append(shapely.geometry.Polygon([[449,146],[462,44],[440,22],[413,38]]))
+    shapeList.append(shapely.geometry.Polygon([[403,135],[332,135],[332,22],[403,22]]))
+    shapeList.append(shapely.geometry.Polygon([[320,46],[293,17],[248,21],[249,88]]))
+    shapeList.append(shapely.geometry.Polygon([[220,62],[198,147],[245,147]]))
+
+    shapeList.append(shapely.geometry.Polygon([[154,16],[194,70],[161,141],[102,128],[94,73]]))
+
+    edgeList = []
+    # shape 1
+    edgeList.append(Edge(Point(110,170),Point(110,222)))
+    edgeList.append(Edge(Point(110,222),Point(284,222)))
+    edgeList.append(Edge(Point(284,222),Point(284,170)))
+    edgeList.append(Edge(Point(284,170),Point(110,170)))
+    # shape 2
+    edgeList.append(Edge(Point(308,197),Point(343,162)))
+    edgeList.append(Edge(Point(343,162),Point(291,121)))
+    edgeList.append(Edge(Point(291,121),Point(308,197)))
+    # shape 3
+    edgeList.append(Edge(Point(410,140),Point(374,166)))
+    edgeList.append(Edge(Point(374,166),Point(373,207)))
+    edgeList.append(Edge(Point(373,207),Point(408,226)))
+    edgeList.append(Edge(Point(408,226),Point(441,206)))
+    edgeList.append(Edge(Point(441,206),Point(440,165)))
+    edgeList.append(Edge(Point(440,165),Point(410,140)))
+    # shape 4
+    edgeList.append(Edge(Point(449,146),Point(462,44)))
+    edgeList.append(Edge(Point(462,44),Point(440,22)))
+    edgeList.append(Edge(Point(440,22),Point(413,38)))
+    edgeList.append(Edge(Point(413,38),Point(449,146)))
+    # shape 5
+    edgeList.append(Edge(Point(403,135),Point(332,135)))
+    edgeList.append(Edge(Point(332,135),Point(332,22)))
+    edgeList.append(Edge(Point(332,22),Point(403,22)))
+    edgeList.append(Edge(Point(403,22),Point(403,135)))
+    # shape 6
+    edgeList.append(Edge(Point(320,46),Point(293,17)))
+    edgeList.append(Edge(Point(293,17),Point(248,21)))
+    edgeList.append(Edge(Point(248,21),Point(249,88)))
+    edgeList.append(Edge(Point(249,88),Point(320,46)))
+    # shape 7
+    edgeList.append(Edge(Point(220,62),Point(198,147)))
+    edgeList.append(Edge(Point(198,147),Point(245,147)))
+    edgeList.append(Edge(Point(245,147),Point(220,62)))
+    #shape 8
+    edgeList.append(Edge(Point(154,16),Point(194,70)))
+    edgeList.append(Edge(Point(194,70),Point(161,141)))
+    edgeList.append(Edge(Point(161,141),Point(102,128)))
+    edgeList.append(Edge(Point(102,128),Point(94,73)))
+    edgeList.append(Edge(Point(94,73),Point(154,16)))
+
+
+    
+    startPoint = Point(94,199)
+    endPoint = Point(469,24)
 
     points = []
     with open('Points.csv', 'r') as file:
@@ -109,51 +231,56 @@ def main():
                     x = int(row[0])
                     y = int(row[1])
                     points.append(Point(x,y))
-    edges = []
-    with open('Edges.csv', 'r') as file:
-            reader = csv.reader(file)
-            next(reader)
-            for row in reader:
-                    p1 = int(row[0])
-                    p2 = int(row[1])
-                    edges.append(Edge(points[p1-1],points[p2-1]))
 
-    fig2 = Figure(points,edges)
-
-    startPoint = Point(94,199)
-    endPoint = Point(471,23)
-
-    fig1 = Figure(listaPuncte,listaDistante)
-
-
-    # p1=Point(1,1)
-    # p2=Point(2,3)
-    # p3=Point(0,0)
-    # p4=Point(0,4)
-    # plt.plot(p1.x, p1.y,  color='blue', marker='o', markerfacecolor='blue', markersize=12)
-    # plt.plot(p2.x, p2.y,  color='blue', marker='o', markerfacecolor='blue', markersize=12)
-    # plt.plot(p3.x, p3.y,  color='red', marker='o', markerfacecolor='red', markersize=12)
-    # plt.plot(p4.x, p4.y,  color='red', marker='o', markerfacecolor='red', markersize=12)
-    # e1 = Edge(p1,p2)
-    # e2 = Edge(p3,p4)
-    # print(e1.intersect(e2))
-    
-    # e1.deseneaza()
-    # e2.deseneaza()
 
     
 
-    startPoint.deseneaza()
-    endPoint.deseneaza()
-    fig2.deseneaza()
-    #plt.plot(5, 10,  color='blue', marker='o', markerfacecolor='blue', markersize=12)
 
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    for shape in shapeList:
+        ax.add_patch(descartes.PolygonPatch(shape, fc='blue', alpha=0.5))
 
-    listPosibilitati = createFreeEdges(startPoint, points, edges)
-    for edge in listPosibilitati:
-        print(str(edge))
-        edge.deseneaza()
+    dictVecini = {}
+    dictVecini[startPoint]=reachableNodes(startPoint,points,shapeList, edgeList)
+    dictVecini[endPoint]=reachableNodes(endPoint,points,shapeList, edgeList)
+    for point in points:
+        dictVecini[point]=reachableNodes(point,points,shapeList, edgeList)
 
+    
+    heueristics = {}
+    for p in points:
+        heueristics[p] = startPoint.calculateDistance(p)
+    heueristics[startPoint] = 0
+    heueristics[endPoint] = startPoint.calculateDistance(endPoint)
+
+    aStarGraph = AStarGraph()
+    for node in points:
+        for vecin in dictVecini[node]:
+            aStarGraph.connect(node, vecin, node.calculateDistance(vecin))
+    for vecin in dictVecini[startPoint]:
+        aStarGraph.connect(startPoint, vecin, startPoint.calculateDistance(vecin))
+    for vecin in dictVecini[endPoint]:
+        aStarGraph.connect(endPoint, vecin, endPoint.calculateDistance(vecin))
+    aStarGraph.make_undirected()
+
+    path = AStarSearch(aStarGraph, heueristics, startPoint, endPoint)
+
+    colors = ['b','r','g']
+
+    sum = 0
+    for i in range(len(path)-1):
+        sum += path[i].calculateDistance(path[i+1])
+        line = shapely.geometry.LineString([[path[i].x, path[i].y], [path[i+1].x, path[i+1].y]])
+        ax.plot(*np.array(line).T, color=colors[i%3], linewidth=3, solid_capstyle='round')
+
+    score = 1000 - sum
+    print("Score:", score)
+
+    ax.axis('equal')
+
+    plt.plot(startPoint.x, startPoint.y,  color='red', marker='o', markerfacecolor='red', markersize=12)
+    plt.plot(endPoint.x, endPoint.y,  color='red', marker='o', markerfacecolor='red', markersize=12)
 
     plt.show()
 main()
