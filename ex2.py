@@ -2,6 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import shapely.geometry
 import descartes
+import random
+
 
 from math import sqrt
 import csv
@@ -140,10 +142,6 @@ def add_to_open(open, neighbor):
             return False
     return True
 
-def intersectAnyShape(line, shapeList):
-    for shape in shapeList:
-        if line.intersects(shape):
-            return line.intersection(shape)
 
 def reachableNodes(startPoint, pointList, shapeList, edgeList):
     nodes = []
@@ -155,12 +153,28 @@ def reachableNodes(startPoint, pointList, shapeList, edgeList):
                 continue
             else:
                 second_line = shapely.geometry.LineString([(kante.p1.x, kante.p1.y), (kante.p2.x, kante.p2.y)])
-                if line.intersects(second_line) is True:
+                if line.intersects(second_line):
                     isIntersecting = True
+                for shape in shapeList:
+                    if shape.contains(line):
+                        isIntersecting = True
         if isIntersecting is False:
             nodes.append(p)
     return nodes
         
+
+def intersectShape(line, shapeList):
+    for shape in shapeList:
+        if(line.intersects(shape)):
+            return True
+    return False
+
+def isInsideShape(x,y,shapeList):
+    shapelyPoint = shapely.geometry.Point(x,y)
+    for shape in shapeList:
+        if shape.contains(shapelyPoint):
+            return True
+    return False
 
 def main():
     shapeList = []
@@ -218,11 +232,6 @@ def main():
     edgeList.append(Edge(Point(102,128),Point(94,73)))
     edgeList.append(Edge(Point(94,73),Point(154,16)))
 
-
-    
-    startPoint = Point(94,199)
-    endPoint = Point(469,24)
-
     points = []
     with open('Points.csv', 'r') as file:
             reader = csv.reader(file)
@@ -232,55 +241,126 @@ def main():
                     y = int(row[1])
                     points.append(Point(x,y))
 
+    for nrRep in range(100):  
+        print("Nr rep: ", nrRep+1)  
 
-    
+        
+        randX= random.randint(0,400)
+        randY= random.randint(0,300)
+
+        while isInsideShape(randX, randY, shapeList):
+            randX= random.randint(0,400)
+            randY= random.randint(0,300)
+
+        startPoint = Point(randX,randY)
+        endPoint = Point(469,24)
+
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        for shape in shapeList:
+            ax.add_patch(descartes.PolygonPatch(shape, fc='blue', alpha=0.5))
 
 
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    for shape in shapeList:
-        ax.add_patch(descartes.PolygonPatch(shape, fc='blue', alpha=0.5))
+         
 
-    dictVecini = {}
-    dictVecini[startPoint]=reachableNodes(startPoint,points,shapeList, edgeList)
-    dictVecini[endPoint]=reachableNodes(endPoint,points,shapeList, edgeList)
-    for point in points:
-        dictVecini[point]=reachableNodes(point,points,shapeList, edgeList)
+        dictVecini = {}
+        dictVecini[startPoint]=reachableNodes(startPoint,points,shapeList, edgeList)
+        dictVecini[endPoint]=reachableNodes(endPoint,points, shapeList, edgeList)
+        for point in points:
+            dictVecini[point]=reachableNodes(point,points, shapeList, edgeList)
 
-    
-    heueristics = {}
-    for p in points:
-        heueristics[p] = startPoint.calculateDistance(p)
-    heueristics[startPoint] = 0
-    heueristics[endPoint] = startPoint.calculateDistance(endPoint)
+        
+        heueristics = {}
+        for p in points:
+            heueristics[p] = startPoint.calculateDistance(p)
+        heueristics[startPoint] = 0
+        heueristics[endPoint] = startPoint.calculateDistance(endPoint)
 
-    aStarGraph = AStarGraph()
-    for node in points:
-        for vecin in dictVecini[node]:
-            aStarGraph.connect(node, vecin, node.calculateDistance(vecin))
-    for vecin in dictVecini[startPoint]:
-        aStarGraph.connect(startPoint, vecin, startPoint.calculateDistance(vecin))
-    for vecin in dictVecini[endPoint]:
-        aStarGraph.connect(endPoint, vecin, endPoint.calculateDistance(vecin))
-    aStarGraph.make_undirected()
+        aStarGraph = AStarGraph()
+        for node in points:
+            for vecin in dictVecini[node]:
+                aStarGraph.connect(node, vecin, node.calculateDistance(vecin))
+        for vecin in dictVecini[startPoint]:
+            aStarGraph.connect(startPoint, vecin, startPoint.calculateDistance(vecin))
+        for vecin in dictVecini[endPoint]:
+            aStarGraph.connect(endPoint, vecin, endPoint.calculateDistance(vecin))
+        aStarGraph.make_undirected()
+        # c)
+        proc = random.randint(0,100)
+        if proc < 30:
+            print("wrong")
+            randX= random.randint(0,400)
+            randY= random.randint(0,300)
 
-    path = AStarSearch(aStarGraph, heueristics, startPoint, endPoint)
+            while isInsideShape(randX, randY, shapeList):
+                randX= random.randint(0,400)
+                randY= random.randint(0,300)
+            endPoint = Point(randX,randY)
 
-    colors = ['b','r','g']
+            dictVecini = {}
+            dictVecini[startPoint]=reachableNodes(startPoint,points,shapeList, edgeList)
+            dictVecini[endPoint]=reachableNodes(endPoint,points, shapeList, edgeList)
+            for point in points:
+                dictVecini[point]=reachableNodes(point,points, shapeList, edgeList)
 
-    sum = 0
-    for i in range(len(path)-1):
-        sum += path[i].calculateDistance(path[i+1])
-        line = shapely.geometry.LineString([[path[i].x, path[i].y], [path[i+1].x, path[i+1].y]])
-        ax.plot(*np.array(line).T, color=colors[i%3], linewidth=3, solid_capstyle='round')
+            
+            heueristics = {}
+            for p in points:
+                heueristics[p] = startPoint.calculateDistance(p)
+            heueristics[startPoint] = 0
+            heueristics[endPoint] = startPoint.calculateDistance(endPoint)
 
-    score = 1000 - sum
-    print("Score:", score)
+            aStarGraph = AStarGraph()
+            for node in points:
+                for vecin in dictVecini[node]:
+                    aStarGraph.connect(node, vecin, node.calculateDistance(vecin))
+            for vecin in dictVecini[startPoint]:
+                aStarGraph.connect(startPoint, vecin, startPoint.calculateDistance(vecin))
+            for vecin in dictVecini[endPoint]:
+                aStarGraph.connect(endPoint, vecin, endPoint.calculateDistance(vecin))
+            aStarGraph.make_undirected()
+            
+            line = shapely.geometry.LineString([[startPoint.x, startPoint.y], [endPoint.x, endPoint.y]])
+            ax.plot(*np.array(line).T, color="r", linewidth=3, solid_capstyle='round')
+            if intersectShape(line, shapeList):
+                path = AStarSearch(aStarGraph, heueristics, startPoint, endPoint)  
+               
+                colors = ['#4287f5','#ff4f87','#ffac30','#85fffd','#be85ff']
 
-    ax.axis('equal')
+                sum = 0
+                for i in range(len(path)-1):
+                    sum += path[i].calculateDistance(path[i+1])
+                    line = shapely.geometry.LineString([[path[i].x, path[i].y], [path[i+1].x, path[i+1].y]])
+                    ax.plot(*np.array(line).T, color=colors[i%3], linewidth=3, solid_capstyle='round')
 
-    plt.plot(startPoint.x, startPoint.y,  color='red', marker='o', markerfacecolor='red', markersize=12)
-    plt.plot(endPoint.x, endPoint.y,  color='red', marker='o', markerfacecolor='red', markersize=12)
+                score = 1000 - sum
+                print("Score:", score)  
+            else:
+                score = 1000 - startPoint.calculateDistance(endPoint)
+                print("Score:", score)
+        else:
+            path = AStarSearch(aStarGraph, heueristics, startPoint, endPoint)
 
-    plt.show()
+            colors = ['#4287f5','#ff4f87','#ffac30','#85fffd','#be85ff']
+
+            sum = 0
+            for i in range(len(path)-1):
+                sum += path[i].calculateDistance(path[i+1])
+                line = shapely.geometry.LineString([[path[i].x, path[i].y], [path[i+1].x, path[i+1].y]])
+                ax.plot(*np.array(line).T, color=colors[i%3], linewidth=3, solid_capstyle='round')
+
+            score = 1000 - sum
+            print("Score:", score)
+
+        ax.axis('equal')
+
+        plt.plot(startPoint.x, startPoint.y,  color='red', marker='o', markerfacecolor='red', markersize=12)
+        plt.plot(endPoint.x, endPoint.y,  color='red', marker='o', markerfacecolor='red', markersize=12)
+
+        plt.show()
 main()
+
+"""
+a) cel mai scurt drum intre 2 puncte este o dreapta; daca definim o dreapta de la un punct la un varf, Zustandsraum se transforma din inifinit in ceva finit
+d) daca d este foarte mic merge direct la endNode fara sa treaca prin varf daca se intersecteaza cu un Kante antuni face A*
+"""
